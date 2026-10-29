@@ -40,14 +40,20 @@ function validateProductionMongoUri(uriValue: string | undefined): void {
 
   try {
     const parsed = new URL(uri);
-    if (parsed.protocol !== 'mongodb+srv:') {
-      throw new Error('Production MONGODB_URI must use the MongoDB Atlas SRV format (mongodb+srv://...).');
+    if (!/^mongodb(?:\+srv)?:$/i.test(parsed.protocol)) {
+      throw new Error('Production MONGODB_URI must use a MongoDB scheme (mongodb:// or mongodb+srv://).');
     }
-    if (!parsed.hostname.endsWith('.mongodb.net')) {
-      throw new Error('Production MONGODB_URI must target an Atlas host ending in .mongodb.net.');
+    if (!parsed.hostname) {
+      throw new Error('Production MONGODB_URI must include a hostname.');
     }
-    if (!parsed.pathname || parsed.pathname === '/') {
+
+    const databaseName = parsed.pathname.replace(/^\/+/, '').split('/')[0]?.trim();
+    if (!databaseName) {
       throw new Error('Production MONGODB_URI must include an explicit database name.');
+    }
+
+    if (parsed.searchParams.get('directConnection') === 'true') {
+      throw new Error('Production MONGODB_URI must not enable directConnection.');
     }
   } catch (error) {
     if (error instanceof Error && error.message.includes('Production MONGODB_URI')) {

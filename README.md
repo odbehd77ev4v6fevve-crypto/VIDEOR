@@ -25,7 +25,7 @@ Optional application sample content is disabled by default. Set `VIDORA_SEED=tru
 
 Both commands require `MONGODB_URI` to include an explicit database name and never report success until database operations complete. Do not run either command against Production unless the exact target database has been operator-approved.
 
-Production requires `MONGODB_URI` in `mongodb+srv://` format whose authority is an Atlas `*.mongodb.net` host. A development-only `mongodb://` URI must not be used in production. Obtain the Atlas SRV URI for the intended database from Atlas and verify the database name and least-privilege database user before deployment.
+Production requires a valid MongoDB connection string in `mongodb://` or `mongodb+srv://` format with an explicit database name. The application accepts legitimate MongoDB service URIs from Atlas or other supported MongoDB deployments, provided the URI is syntactically valid and not a placeholder. Verify the database name and least-privilege database user before deployment.
 
 Run the integration suite only against a disposable database whose name contains `test`, with a test-only administrator. Configure `TEST_MONGODB_URI`, `TEST_ADMIN_EMAIL`, and `TEST_ADMIN_PASSWORD` (at least 12 characters) in your local environment. The test runner loads `.env`, verifies the test URI differs from `MONGODB_URI`, and refuses non-local `TEST_API_URL` targets. `TEST_API_URL` is optional and defaults to `http://localhost:3000`.
 

@@ -1,6 +1,6 @@
 import dotenv from 'dotenv';
 import { connectDatabase, disconnectDatabase, getDatabaseStatus } from '../server/db/connection';
-import { applyLocalDevelopmentDefaults, requireIsolatedTestMongoUri } from '../server/config';
+import { applyLocalDevelopmentDefaults, requireIsolatedTestMongoUri, validateServerConfiguration } from '../server/config';
 import { seedInitialData } from '../server/db/seed';
 import { User } from '../server/models/User';
 import { Video } from '../server/models/Video';
@@ -121,6 +121,43 @@ async function runTests() {
       rejectedLegacyId = /Invalid YouTube video ID/.test(String(error?.message || ''));
     }
     assert(rejectedLegacyId, 'fetchYouTubeMetadata rejects invalid legacy IDs instead of constructing broken thumbnail URLs');
+
+    const originalProductionConfig = {
+      MONGODB_URI: process.env.MONGODB_URI,
+      JWT_SECRET: process.env.JWT_SECRET,
+      APP_URL: process.env.APP_URL,
+      ADMIN_EMAIL: process.env.ADMIN_EMAIL,
+      ADMIN_PASSWORD: process.env.ADMIN_PASSWORD,
+    };
+
+    try {
+      process.env.MONGODB_URI = 'mongodb+srv://user:pass@cluster0.abcd.mongodb.net/vidora?retryWrites=true&w=majority';
+      process.env.JWT_SECRET = 'abcdefghijklmnopqrstuvwxyz1234567890';
+      process.env.APP_URL = 'https://vidora.example.com';
+      process.env.ADMIN_EMAIL = 'admin@vidora.example.com';
+      process.env.ADMIN_PASSWORD = 'ProductionAdminPassword123!';
+      validateServerConfiguration(true);
+      assert(true, 'Production configuration accepts a valid MongoDB Atlas SRV URI with a real database name');
+
+      process.env.MONGODB_URI = 'mongodb://db-user:db-pass@mongo.example.com:27017/vidora';
+      validateServerConfiguration(true);
+      assert(true, 'Production configuration accepts a valid direct MongoDB URI when the host is not Atlas-specific');
+
+      process.env.MONGODB_URI = '';
+      let emptyUriRejected = false;
+      try {
+        validateServerConfiguration(true);
+      } catch (error: any) {
+        emptyUriRejected = /MONGODB_URI must be configured in production\.|MONGODB_URI must be a valid MongoDB connection string in production\./.test(String(error?.message || ''));
+      }
+      assert(emptyUriRejected, 'Production configuration rejects empty MongoDB URIs');
+    } finally {
+      process.env.MONGODB_URI = originalProductionConfig.MONGODB_URI;
+      process.env.JWT_SECRET = originalProductionConfig.JWT_SECRET;
+      process.env.APP_URL = originalProductionConfig.APP_URL;
+      process.env.ADMIN_EMAIL = originalProductionConfig.ADMIN_EMAIL;
+      process.env.ADMIN_PASSWORD = originalProductionConfig.ADMIN_PASSWORD;
+    }
 
     if (!hasDatabaseTestConfig) {
       console.log('[BLOCKED] TEST_MONGODB_URI, TEST_ADMIN_EMAIL, and TEST_ADMIN_PASSWORD are not configured; skipping database-backed integration tests.');

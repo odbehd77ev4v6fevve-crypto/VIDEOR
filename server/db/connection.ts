@@ -33,7 +33,7 @@ export async function connectDatabase(): Promise<void> {
     throw new Error('MONGODB_URI must be configured before VIDORA can start.');
   }
   if (isPlaceholderMongoUri(uri)) {
-    throw new Error('MONGODB_URI must be configured with the Atlas connection string before VIDORA can start.');
+    throw new Error('MONGODB_URI must be configured with a valid MongoDB connection string before VIDORA can start.');
   }
   if (!/^mongodb(?:\+srv)?:\/\//i.test(uri)) {
     throw new Error('MONGODB_URI must use a MongoDB connection scheme.');
@@ -42,16 +42,16 @@ export async function connectDatabase(): Promise<void> {
   if (!databaseName) {
     throw new Error('MONGODB_URI must explicitly include a database name.');
   }
-  if (process.env.NODE_ENV === 'production' && !/^mongodb\+srv:\/\//i.test(uri)) {
-    throw new Error('Production MONGODB_URI must use MongoDB Atlas SRV format (mongodb+srv://).');
-  }
+  const parsedUri = new URL(uri);
   if (process.env.NODE_ENV === 'production') {
-    const authority = uri.match(/^mongodb\+srv:\/\/[^/]+@([^/?]+)/i)?.[1];
-    if (!authority || !authority.toLowerCase().endsWith('.mongodb.net')) {
-      throw new Error('Production MONGODB_URI must point to an Atlas host (*.mongodb.net).');
+    if (!/^mongodb(?:\+srv)?:$/i.test(parsedUri.protocol)) {
+      throw new Error('Production MONGODB_URI must use a MongoDB scheme (mongodb:// or mongodb+srv://).');
+    }
+    if (!parsedUri.hostname) {
+      throw new Error('Production MONGODB_URI must include a hostname.');
     }
   }
-  if (/^mongodb\+srv:\/\/[^/]*\/[^?]*\?[^\n]*directConnection=true/i.test(uri)) {
+  if (parsedUri.searchParams.get('directConnection') === 'true') {
     throw new Error('MONGODB_URI must not enable directConnection.');
   }
 
