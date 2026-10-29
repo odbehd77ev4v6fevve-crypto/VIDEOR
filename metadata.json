@@ -1,0 +1,6 @@
+{
+  "name": "VIDORA",
+  "description": "Premium YouTube-embedded video discovery and viewing platform with curated collections, watchlist, playlists, and dark cinematic UI.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
