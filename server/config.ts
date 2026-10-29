@@ -32,6 +32,46 @@ export function applyLocalDevelopmentDefaults(): void {
   }
 }
 
+function validateProductionMongoUri(uriValue: string | undefined): void {
+  const uri = uriValue?.trim();
+  if (!uri) {
+    throw new Error('MONGODB_URI must be configured in production.');
+  }
+
+  try {
+    const parsed = new URL(uri);
+    if (parsed.protocol !== 'mongodb+srv:') {
+      throw new Error('Production MONGODB_URI must use the MongoDB Atlas SRV format (mongodb+srv://...).');
+    }
+    if (!parsed.hostname.endsWith('.mongodb.net')) {
+      throw new Error('Production MONGODB_URI must target an Atlas host ending in .mongodb.net.');
+    }
+    if (!parsed.pathname || parsed.pathname === '/') {
+      throw new Error('Production MONGODB_URI must include an explicit database name.');
+    }
+  } catch (error) {
+    if (error instanceof Error && error.message.includes('Production MONGODB_URI')) {
+      throw error;
+    }
+    throw new Error('MONGODB_URI must be a valid MongoDB connection string in production.');
+  }
+}
+
+function validateProductionAdminCredentials(): void {
+  const adminEmail = process.env.ADMIN_EMAIL?.trim();
+  if (!adminEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(adminEmail)) {
+    throw new Error('ADMIN_EMAIL must be configured with a valid address in production.');
+  }
+
+  const adminPassword = process.env.ADMIN_PASSWORD?.trim();
+  if (!adminPassword || adminPassword.length < 12) {
+    throw new Error('ADMIN_PASSWORD must be configured with at least 12 characters in production.');
+  }
+  if (/replace|example|changeme|demo|placeholder/i.test(adminPassword)) {
+    throw new Error('ADMIN_PASSWORD must not use a placeholder value in production.');
+  }
+}
+
 export function validateServerConfiguration(isProduction: boolean): void {
   let jwtSecret = process.env.JWT_SECRET?.trim();
   if (!jwtSecret) {
@@ -50,6 +90,11 @@ export function validateServerConfiguration(isProduction: boolean): void {
   }
   if (isProduction && jwtSecret.toLowerCase().includes('replace')) {
     throw new Error('A production JWT_SECRET must not use the example placeholder.');
+  }
+
+  if (isProduction) {
+    validateProductionMongoUri(process.env.MONGODB_URI);
+    validateProductionAdminCredentials();
   }
 
   if (isProduction && !process.env.APP_URL?.trim()) {
