@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { validateMongoUri, normalizeMongoConnectionString } from '../config';
 
 export interface DbStatus {
   connected: boolean;
@@ -24,36 +25,20 @@ function isPlaceholderMongoUri(uri: string): boolean {
 export async function connectDatabase(): Promise<void> {
   if (mongoose.connection.readyState === 1) return;
 
-  const uri = (
+  const rawUri = (
     process.env.MONGODB_URI ||
     process.env.TEST_MONGODB_URI ||
     (process.env.NODE_ENV === 'test' ? 'mongodb://127.0.0.1:27017/vidora_test' : 'mongodb://127.0.0.1:27017/vidora_dev')
-  ).trim();
+  );
+  const uri = normalizeMongoConnectionString(rawUri) ?? rawUri.trim();
   if (!uri) {
     throw new Error('MONGODB_URI must be configured before VIDORA can start.');
   }
   if (isPlaceholderMongoUri(uri)) {
     throw new Error('MONGODB_URI must be configured with a valid MongoDB connection string before VIDORA can start.');
   }
-  if (!/^mongodb(?:\+srv)?:\/\//i.test(uri)) {
-    throw new Error('MONGODB_URI must use a MongoDB connection scheme.');
-  }
-  const databaseName = uri.match(/^mongodb(?:\+srv)?:\/\/[^/]+\/([^/?#]+)(?:\?|#|$)/i)?.[1];
-  if (!databaseName) {
-    throw new Error('MONGODB_URI must explicitly include a database name.');
-  }
-  const parsedUri = new URL(uri);
-  if (process.env.NODE_ENV === 'production') {
-    if (!/^mongodb(?:\+srv)?:$/i.test(parsedUri.protocol)) {
-      throw new Error('Production MONGODB_URI must use a MongoDB scheme (mongodb:// or mongodb+srv://).');
-    }
-    if (!parsedUri.hostname) {
-      throw new Error('Production MONGODB_URI must include a hostname.');
-    }
-  }
-  if (parsedUri.searchParams.get('directConnection') === 'true') {
-    throw new Error('MONGODB_URI must not enable directConnection.');
-  }
+
+  validateMongoUri(uri, { production: process.env.NODE_ENV === 'production' });
 
   await mongoose.connect(uri, {
     serverSelectionTimeoutMS: 10_000,

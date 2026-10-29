@@ -1,8 +1,77 @@
+import { MongoClient } from 'mongodb';
+
 export const DEFAULT_LOCAL_MONGODB_URI = 'mongodb://127.0.0.1:27017/vidora_dev';
 export const DEFAULT_TEST_MONGODB_URI = 'mongodb://127.0.0.1:27017/vidora_test';
 export const DEFAULT_LOCAL_JWT_SECRET = 'vidora-local-development-secret-key-123456';
 export const DEFAULT_ADMIN_EMAIL = 'admin@vidora.local';
 export const DEFAULT_ADMIN_PASSWORD = 'VidoraLocalPassword123!';
+
+export function normalizeMongoConnectionString(value: string | undefined): string | undefined {
+  const raw = value?.trim();
+  if (!raw) {
+    return undefined;
+  }
+
+  const withoutQuotes = raw.replace(/^(['"])(.*)\1$/, '$2');
+  return withoutQuotes
+    .replace(/^export\s+MONGODB_URI\s*=\s*/i, '')
+    .replace(/^MONGODB_URI\s*=\s*/i, '')
+    .trim();
+}
+
+export function getMongoDatabaseName(uriValue: string): string | null {
+  const uri = normalizeMongoConnectionString(uriValue);
+  if (!uri) {
+    return null;
+  }
+
+  const match = uri.match(/^mongodb(?:\+srv)?:\/\/(?:[^@/]+@)?[^/?#]+\/([^/?#]+)(?:[?#]|$)/i);
+  return match?.[1]?.trim() || null;
+}
+
+export function validateMongoUri(uriValue: string | undefined, options: { production?: boolean } = {}): string {
+  const uri = normalizeMongoConnectionString(uriValue);
+  if (!uri) {
+    if (options.production) {
+      throw new Error('MONGODB_URI must be configured in production.');
+    }
+    throw new Error('MONGODB_URI must be configured before VIDORA can start.');
+  }
+
+  if (uri.includes('<username>') || uri.includes('<password>')) {
+    throw new Error('MONGODB_URI must not include placeholder credentials.');
+  }
+
+  if (!/^mongodb(?:\+srv)?:\/\//i.test(uri)) {
+    if (options.production) {
+      throw new Error('Production MONGODB_URI must use a MongoDB scheme (mongodb:// or mongodb+srv://).');
+    }
+    throw new Error('MONGODB_URI must use a MongoDB connection scheme.');
+  }
+
+  try {
+    new MongoClient(uri);
+  } catch (error) {
+    if (options.production) {
+      throw new Error('MONGODB_URI must be a valid MongoDB connection string in production.');
+    }
+    throw new Error('MONGODB_URI must be a valid MongoDB connection string before VIDORA can start.');
+  }
+
+  const databaseName = getMongoDatabaseName(uri);
+  if (!databaseName) {
+    if (options.production) {
+      throw new Error('Production MONGODB_URI must include an explicit database name.');
+    }
+    throw new Error('MONGODB_URI must explicitly include a database name.');
+  }
+
+  if (/(?:^|[?&])directConnection=true(?:&|$)/i.test(uri)) {
+    throw new Error('MONGODB_URI must not enable directConnection.');
+  }
+
+  return uri;
+}
 
 export function applyLocalDevelopmentDefaults(): void {
   if (process.env.NODE_ENV === 'production') {
@@ -33,34 +102,7 @@ export function applyLocalDevelopmentDefaults(): void {
 }
 
 function validateProductionMongoUri(uriValue: string | undefined): void {
-  const uri = uriValue?.trim();
-  if (!uri) {
-    throw new Error('MONGODB_URI must be configured in production.');
-  }
-
-  try {
-    const parsed = new URL(uri);
-    if (!/^mongodb(?:\+srv)?:$/i.test(parsed.protocol)) {
-      throw new Error('Production MONGODB_URI must use a MongoDB scheme (mongodb:// or mongodb+srv://).');
-    }
-    if (!parsed.hostname) {
-      throw new Error('Production MONGODB_URI must include a hostname.');
-    }
-
-    const databaseName = parsed.pathname.replace(/^\/+/, '').split('/')[0]?.trim();
-    if (!databaseName) {
-      throw new Error('Production MONGODB_URI must include an explicit database name.');
-    }
-
-    if (parsed.searchParams.get('directConnection') === 'true') {
-      throw new Error('Production MONGODB_URI must not enable directConnection.');
-    }
-  } catch (error) {
-    if (error instanceof Error && error.message.includes('Production MONGODB_URI')) {
-      throw error;
-    }
-    throw new Error('MONGODB_URI must be a valid MongoDB connection string in production.');
-  }
+  validateMongoUri(uriValue, { production: true });
 }
 
 function validateProductionAdminCredentials(): void {
